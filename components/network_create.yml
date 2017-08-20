@@ -1,0 +1,90 @@
+---
+
+  # IF YOU PROVIDE PRECONFIGURED NETWORK INFRASTRUCTURE PARAMETERS, MAKE SURE YOU DEFINED THEM ALL
+  # IF ANY OF THESE VARIABLES ARE NOT SYNCHRONIZED OR NOT DEFINED - YOU WILL BE IN TROUBLE FOR FURTHER ACTIONS
+  - assert:
+     that:
+       - "aws_region is defined"
+       - "aws_vpc_pubsubnet1 is defined"
+       - "aws_vpc_pubsubnet2 is defined"
+       - "aws_sg_public is defined"
+       - "aws_sg_private is defined"
+       - "aws_sg_app is defined"
+       - "vpc_availability_zone_t1 is defined"
+       - "vpc_availability_zone_t2 is defined"
+    when: aws_vpc_id is defined
+
+  - assert:
+     that:
+       - "aws_region is defined"
+       - "vpc_availability_zone_t1 is defined"
+       - "vpc_availability_zone_t2 is defined"
+    when: aws_vpc_id is not defined
+
+
+  - name: NETWORK | Create the VPC
+    ec2_vpc:
+      state: present
+      region: "{{ aws_region }}"
+      resource_tags:
+          Environment: "{{ readable_env_name }}"
+          Name: "{{ readable_env_name }}-vpc"
+      cidr_block: "{{ vpc_cidr_block }}"
+      subnets: "{{ vpc_subnets }}"
+      dns_support: true
+      dns_hostnames: true
+      internet_gateway: "{{ vpc_internet_gateway|string }}"
+      route_tables: "{{ vpc_route_tables_public }}"
+      wait: yes
+    register: vpc
+    when: aws_vpc_id is not defined
+
+
+  - debug: var=vpc
+    when: aws_vpc_id is not defined
+
+  - name: NETWORK | Creating security groups
+    ec2_group:
+      name: "{{item.name}}"
+      description: "{{item.desc}}"
+      vpc_id: "{{vpc.vpc_id}}"
+      region: "{{ aws_region }}"
+      rules: "{{item.rules}}"
+    with_items:   "{{vpc_security_groups}}"
+    when: aws_vpc_id is not defined
+
+  - set_fact: aws_vpc_id_runtime={{ lookup('aws_vpc_id_from_name', aws_region, readable_env_name + '-vpc') }}
+
+  - set_fact: aws_vpc_pubsubnet1_runtime={{ lookup('aws_subnet_ids_from_names', aws_region, [readable_env_name + '-sb-pub-' + aws_region + '-' + vpc_availability_zone_t1]) }}
+    when: aws_vpc_pubsubnet1 is not defined
+
+  - set_fact: aws_vpc_pubsubnet2_runtime={{ lookup('aws_subnet_ids_from_names', aws_region, [readable_env_name + '-sb-pub-' + aws_region + '-' + vpc_availability_zone_t2]) }}
+    when: aws_vpc_pubsubnet2 is not defined
+
+  - debug: msg="Looks like your VPC, subnetworks and security groups were already configured previously. Check environment yml config for details."
+    when: aws_vpc_id is defined
+
+  - debug: msg="aws_vpc_id :{{ lookup('aws_vpc_id_from_name', aws_region, readable_env_name + '-vpc') }}"
+    when: aws_vpc_id is not defined
+
+  - debug: msg="aws_vpc_pubsubnet1 :{{ aws_vpc_pubsubnet1_runtime }}"
+    when: aws_vpc_pubsubnet1 is not defined
+
+  - debug: msg="aws_vpc_pubsubnet2 :{{ aws_vpc_pubsubnet2_runtime }}"
+    when: aws_vpc_pubsubnet2 is not defined
+
+  - debug: msg="aws_sg_public :{{ lookup('aws_secgroup_ids_from_names', aws_region, [readable_env_name + '-public-LOADBALANCER']) }}"
+    when: aws_sg_public is not defined
+
+  - debug: msg="aws_sg_app :{{ lookup('aws_secgroup_ids_from_names', aws_region, [readable_env_name + '-private-APP']) }}"
+    when: aws_sg_app is not defined
+
+  - debug: msg="aws_sg_private :{{ lookup('aws_secgroup_ids_from_names', aws_region, [readable_env_name + '-private-DATABASE']) }}"
+    when: aws_sg_private is not defined
+
+  - template: src="{{root_dir}}/templates/aws-region-env.yml.j2" dest="{{root_dir}}/aws-{{aws_region}}-{{env}}.yml"
+
+  - fail: msg="If you just created VPC, time to stop and create environment file aws-REGION-ENV.yml so the application deployment recipe may use these data"
+    when: "{{item}} is not defined"
+    with_items:
+     - aws_vpc_id

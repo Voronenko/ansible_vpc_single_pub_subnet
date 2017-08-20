@@ -1,0 +1,10 @@
+---
+  
+aws_vpc_id: "{{aws_vpc_id_runtime}}"
+aws_vpc_pubsubnet1: "{{aws_vpc_pubsubnet1_runtime}}"
+aws_vpc_pubsubnet2: "{{aws_vpc_pubsubnet2_runtime}}"
+aws_sg_public: "{{ lookup('aws_secgroup_ids_from_names', aws_region, [readable_env_name + '-public-LOADBALANCER']) }}"
+aws_sg_app: "{{ lookup('aws_secgroup_ids_from_names', aws_region, [readable_env_name + '-private-APP']) }}"
+aws_sg_private: "{{ lookup('aws_secgroup_ids_from_names', aws_region, [readable_env_name + '-private-DATABASE']) }}"
+
+
